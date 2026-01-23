@@ -619,17 +619,6 @@ Action:
 - MLPS control mapping
 - Assistance configuring assessment-ready policies
 
----
-
-### Q7.2: Certifications?
-
-**A:** Yes, including:
-
-- ✅ **ISO 27001 ISMS**
-- ✅ **ISO 9001 QMS**
-- ✅ **MLPS Level-3 filing** (for our own platform)
-- ✅ **Software product registration**
-- ✅ **Cybersecurity product sales license**
 
 ---
 
