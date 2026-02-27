@@ -1,0 +1,99 @@
+{
+  "desc": {
+    "plugin_name": "官网类只允许GET请求插件",
+    "plugin_for_app_name": "官网类",
+    "plugin_for_app_version": "V1",
+    "plugin_version": "1.0.0",
+    "plugin_need_engine_version": "1.0",
+    "plugin_author": "TigerSec",
+    "plugin_description": "官网类只允许GET请求插件",
+    "plugin_last_updated": "2025-12-18"
+  },
+  "user_configures": [
+    {
+      "lable": "允许的请求方式",
+      "json_path": "gw_configures.sub_routes[0].routes[0].methods",
+      "type": "mult_select",
+      "value_type": "text",
+      "options": [
+        {
+          "label": "GET",
+          "value": "GET"
+        },
+        {
+          "label": "POST",
+          "value": "POST"
+        },
+        {
+          "label": "PUT",
+          "value": "PUT"
+        },
+        {
+          "label": "DELETE",
+          "value": "DELETE"
+        },
+        {
+          "label": "PATCH",
+          "value": "PATCH"
+        },
+        {
+          "label": "OPTIONS",
+          "value": "OPTIONS"
+        }
+      ],
+      "description": "允许的请求方式,支持多选"
+    }
+  ],
+  "gw_configures": {
+    "plugins": [
+      "redirect",
+      "client_ip",
+      "uri_blocker",
+      "request_blocker",
+      "ua_restriction",
+      "ip_restriction",
+      "uri_bypass",
+      "proxy_rewrite",
+      "unzip",
+      "response_rewrite",
+      "gzip",
+      "app_logger"
+    ],
+    "sub_routes": [
+      {
+        "name": "only_allow_get",
+        "plugins": [
+          "redirect",
+          "client_ip",
+          "uri_blocker",
+          "request_blocker",
+          "ua_restriction",
+          "ip_restriction",
+          {
+            "name": "exposure_auth",
+            "conf": {
+              "reject_unauthed": true,
+              "log_unauthed": false,
+              "response_code": 403,
+              "response_msg": "禁止访问"
+            }
+          },
+          "proxy_rewrite",
+          "unzip",
+          "gzip"
+        ],
+        "routes": [
+          {
+            "uri": "/*",
+            "methods": [
+              "GET"
+            ]
+          }
+        ]
+      }
+    ],
+    "plugin_confs": {
+      
+    }
+  }
+}

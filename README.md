@@ -1,628 +1,489 @@
-# WEB Invisishield Product Q&A
+# WEB隐身盾暴露面收敛配置文档
 
-> Version: v1.0  
-> Updated: 2025-12  
-> Audience: Enterprise users, technical teams, partners
+## 概述
 
----
+本文档介绍 WEB隐身盾网关针对暴露面收敛场景的插件编写方案。通过适配应用的认证机制，实现应用零改造的暴露面收敛。
 
-## 📋 How to Use
+## 适用场景
 
-This Q&A covers 60+ questions buyers care most about. It is organized by scenario to help you quickly understand the core capabilities and value of WEB Invisishield.
+**✅ 适合使用零改造引擎规则的场景：**
 
----
+- 企业内部应用（OA/ERP/财务/CRM等）需要暴露面收敛
+- 希望在不修改应用代码的情况下，实现暴露面收敛
+- 需要弱密码实时拦截和暴力破解防护
+- 需要隐藏后端服务接口，降低被扫描和攻击风险
+- 需要满足等保、数据安全法等合规要求
 
-## Table of Contents
+**❌ 不适合的场景：**
 
-1. [Product Positioning & Value](#1-product-positioning--value)  
-2. [Technology & Compatibility](#2-technology--compatibility)  
-3. [Security Capabilities](#3-security-capabilities)  
-4. [Deployment & Network](#4-deployment--network)  
-5. [Implementation & Delivery](#5-implementation--delivery)  
-6. [Support & Services](#6-support--services)  
-7. [Industry & Compliance](#7-industry--compliance)
+- 纯静态网站（无需认证）
+- 需要深度定制认证流程且无法通过配置实现
 
----
+**🚀 快速开始：** 如果你是第一次使用，建议先阅读 [5分钟编写应用插件.md](5分钟编写应用插件.md)
 
-## 1. Product Positioning & Value
+## 文档目录
 
-### ⭐ Q1.1: What is WEB Invisishield? One-line intro
+| 文档 | 说明 |
+|------|------|
+| [FAQ.md](FAQ.md) | ⭐ **新手上路必读** WEB隐身盾常见问题 |
+| **[5分钟编写应用插件.md](5分钟编写应用插件.md)** | ⭐ **新手上路必读**：最小化配置示例、分步配置指南、常见场景模板、快速验证方法 |
+| **[快速开始.md](快速开始.md)** | ⭐ **新手上路必读**：快速开始文档  |
+| **[应用插件文档.md](应用插件文档.md)** | ⭐ **新手上路必读**：应用插件编写文档 |
+| [白名单.md](白名单.md) | 白名单配置文档 |
+| [exposure_auth.md](exposure_auth.md) | 暴露面认证插件，基于 WISID 或应用自身 cookie/header 进行身份验证 |
+| [exposure_login.md](exposure_login.md) | 登录接口插件，Hook 应用登录接口，判定登录成功/失败 |
+| [exposure_session.md](exposure_session.md) | 用户会话处理模块 |
+| [exposure_user.md](exposure_user.md) | 用户信息获取插件，通过子请求获取用户身份信息 |
+| [uri_bypass.md](uri_bypass.md) | 正则白名单 URI 插件，基于正则表达式的白名单配置 |
+| [uri_blocker.md](uri_blocker.md) | 请求头检测与拦截 |
+| [request_blocker.md](request_blocker.md) | 请求体检测与拦截 |
+| [passwd_bruteforce.md](passwd_bruteforce.md) | 登录口暴力破解检测与拦截 |
+| [passwd_capture.md](passwd_capture.md) | 登录口密码捕获 |
+| [passwd_restriction.md](passwd_restriction.md) | 登录口弱密码检测与拦截 |
+| [sub-route.md](sub-route.md) | 子路由配置文档，基于 radixtree 的高效路由匹配 |
+| [ctx-var.md](ctx-var.md) | 请求上下文变量文档，支持的 `$xxx` 变量说明 |
+| [lua-resty-expr.md](lua-resty-expr.md) | 表达式语法文档，用于条件判定 |
+| [path-syntax.md](path-syntax.md) | 路径提取语法文档，JSON/XML 路径语法说明 |
+| [变量分类说明.md](变量分类说明.md) | 变量分类说明文档，涵盖三种变量，系统内部变量，过程内部变量，用户自定义变量 |
+| [条件表达式.md](条件表达式.md) | 条件表达式 |
+| [业务流程架构图.md](业务流程架构图.md) | 业务流程架构图 |
+| [子路由.md](子路由.md) | 子路由配置文档 |
+| [正则表达式性能优化指南.md](正则表达式性能优化指南.md) | 正则表达式性能优化指南，正则表达式性编写的注意事项 |
+| [插件合规性审计清单.md](插件合规性审计清单.md) | 插件合规性审计清单，用于审计插件是否符合新引擎规范 |
+| [plugin-config.schema.json](plugin-config.schema.json) | 插件配置 JSON Schema，用于结构校验与 IDE 支持 |
+| [Cursor+HAR编写零改造插件规则实践手册.md](Cursor+HAR编写零改造插件规则实践手册.md) | Cursor+HAR 编写零改造插件规则实践手册 |
 
-**A:** WEB Invisishield is a **zero-code-change web application attack-surface reduction and secure access solution**. It makes internal web apps (OA/ERP/Finance/HR/CRM) “invisible” on the public Internet while employees access them securely via a browser—no VPN and **no app changes**.
-**WEB Invisishield – Put an invisibility cloak and shield on your web apps**
-*We built WEB Invisishield to let businesses focus on their core work while security teams stop firefighting.*
-*Zero-change compliance, zero-change in the field, easy protection for private web apps.*
+## 核心模块
 
-**Additional note:**  
-> WEB Invisishield hides OA and other internal systems from the public Internet, yet employees can still access them anytime via browser. The whole process requires zero changes to the app and can go live in as little as one day.
+针对暴露面收敛场景，除了防攻击的通用模块外，抽象出四个业务相关的核心模块：
 
----
+| 模块名称 | 用途 |
+|---------|------|
+| `exposure_auth` | 暴露面收敛的鉴权模块，用户配置未得到WISID认证时候的处理方式 |
+| `exposure_login` | Hook 应用的登录接口，判定登录请求的成功/失败，支持密码策略 |
+| `exposure_user` | 判定请求是否已登录，同时获取用户身份信息（user_id、user_name） |
+| `exposure_session` |  定义如何设置WISID会话
 
-### ⭐ Q1.2: What core pain points does it solve?
+**详细说明见：** [5分钟编写应用插件.md](5分钟编写应用插件.md#核心概念2分钟理解)
 
-**A:** Three core pain points:
-
-| Pain Point | Problems with traditional solutions | WEB Invisishield approach |
-|------------|------------------------------------|---------------------------|
-| **Exposure risk** | OA/ERP/Finance/HR/CRM directly exposed to the Internet; frequent vulnerabilities (e.g., various OA 0-days) | Attack surface reduction / non-login surface reduction, invisible to attackers |
-| **Weak account security** | Weak passwords everywhere, brute force is hard to stop | Real-time weak password blocking + login protection |
-| **Cost** | Traditional VPN/ZTNA needs app changes, high cost | No app changes, live in a day |
-
-**Additional note:**  
-> Fits scenarios where OA is exposed to the Internet and under attack risk, apps cannot be modified, or stronger password security is needed. It solves these at once.
-
----
-
-### ⭐ Q1.3: How is it different from ZTNA?
-
-**A:**
-
-| Dimension | ZTNA | WEB Invisishield |
-|-----------|------|------------------|
-| **Users** | All employees | All employees |
-| **Access scope** | All internal resources | Web apps (OA/ERP/Finance/HR/CRM/Portal) |
-| **Client** | Requires installation | No install, browser only |
-| **Identity** | Account/password/cert | Uses the app’s own account system |
-| **User friction** | Users see ZTNA login page | **Original login page, zero friction** |
-| **App changes** | Needed | **Not needed** |
-| **Mobile changes** | Mobile SDK | **Not needed** |
-
-**Additional note:**  
-> Core advantage: no code change for web apps to achieve attack-surface reduction and protection without affecting user experience.
-
----
-
-### 💡 Q1.4: Why the name “Invisishield”?
-
-- **Invisible:** Apps vanish from the public Internet; attackers cannot scan app APIs. In zero-change scenarios, the attack surface converges to one point (the login) and you defend there.
-- **Shield:** Dual protection—gateway blocks threats, login endpoint is hardened (weak password/brute force).
-- **Metaphor:** Like giving web apps an invisibility cloak plus a shield.
-
----
-
-### ⭐ Q1.5: Who is it best for?
-
-**A:**
-
-**Best fit:**
-- Internet/tech, manufacturing, energy, pharma, retail chains (OA/ERP/Finance/HR/CRM need Internet access)
-- 50–2000 seat SMBs
-- Using mainstream OA (Fanwei/Seeyon/Landray, etc.) or self-built apps
-- Limited IT budget, cannot modify apps
-
-**Less suitable:**
-- Pure intranet, no external access (not needed)
-- Mixed L7 + L4 apps → use Tiger Shield Zero Trust Access
-- Non-HTTP protocols → use Tiger Shield Zero Trust Access
-
----
-
-## 2. Technology & Compatibility
-
-### ⭐ Q2.1: How is zero-change achieved?
-
-**A:** Via **smart plugins + gateway proxy**:
+## 代码插件配置优先级
 
 ```
-Working principle:
-1. User visits oa.company.com (resolved to gateway)
-2. User logs in; gateway forwards login traffic; user authenticates in the original system
-3. Smart plugin recognizes the OA login flow and detects login success
-4. Gateway only knows the user is authenticated, then auto onboards. (User is unaware)
-5. Subsequent business traffic is transparently proxied
+代码插件内联配置 > 应用作用域配置 > 全局默认配置
 ```
 
-**Key techniques:**
-- **Login flow recognition:** AI engine analyzes login page structure and auto-adapts
-- **Session persistence:** Transparent cookie/token pass-through
+即：**局部插件组配置 > 应用作用域配置 > 全局作用域配置**
 
-**Additional note:**  
-> Analogy: like installing a smart gate at the OA entrance. After the first successful badge swipe, the system remembers the auth state; subsequent visits need no repeat auth, giving a seamless secure experience.
+### 代码插件数组元素格式
 
----
+`plugins` 数组支持两种元素格式：
 
-### ⭐ Q2.2: Which OA/ERP/Finance/HR/CRM systems are supported?
+| 格式 | 说明 | 配置查找顺序 |
+|------|------|-------------|
+| `"plugin_name"` | 字符串（代码插件名称） | 应用 `plugin_confs` → 全局默认配置 |
+| `{"name": "xxx", "conf": {...}}` | 对象（内联配置） | 直接使用 `conf` 中的配置 |
 
-**A:** *Currently none are supported; we need to write plugins for them.*
+**详细说明见：** [5分钟编写应用插件.md](5分钟编写应用插件.md#核心概念2分钟理解)
 
-**OA systems:**
+### 示例说明
 
-| OA Vendor | Supported Versions | Compatibility | Go-live Time |
-|-----------|--------------------|---------------|--------------|
-| **Fanwei OA** | v8.0–v10.0 | ✅ Prebuilt plugin | 30 min |
-| **Seeyon OA** | A8+, G6+ | ✅ Prebuilt plugin | 30 min |
-| **Landray EKP** | V13–V16 | ✅ Prebuilt plugin | 30 min |
-| **Tongda OA** | 2017+ | ✅ Prebuilt plugin | 30 min |
-| **Other OA** | - | ⚠️ Custom | 1 day |
+```json
+{
+  "user_configures": [
+                {
+                    "json_path": "gw_configures.plugins.exposure_auth.conf.response_code",
+                    "type_comment": "int,text,bool,json,select（单选）和mult_select（多选），并且增加预选值options. select和mult_select的时候还需要定义value_type",
+                    "type": "int",
+                    "value": 403,
+                    "description": "没有认证的流量处理方式 response_code"
+                },
+                {
+                    "json_path": "gw_configures.plugins.exposure_auth.conf.response_msg",
 
-**ERP systems:**
+                    "type": "text",
+                    "value": "禁止访问",
+                    "description": "没有认证的流量处理方式 response_msg"
+                },
+                {
+                    "json_path": "gw_configures.plugins.exposure_auth.conf.response_msg",
 
-| ERP Vendor | Supported Versions | Compatibility | Go-live Time |
-|------------|--------------------|---------------|--------------|
-| **Yonyou NC** | NC6.x | ✅ Prebuilt | 30 min |
-| **Yonyou U8** | U8+ | ✅ Prebuilt | 30 min |
-| **Kingdee K/3** | K/3 WISE | ✅ Prebuilt | 30 min |
-| **Kingdee EAS** | 7.x–8.x | ✅ Prebuilt | 30 min |
-| **Other ERP** | - | ⚠️ Custom | 1 day |
+                    "type": "enum",
+                    "value_type": "text",
+                    "value": ["禁止访问","xxx"],
+                    "description": "没有认证的流量处理方式 response_msg"
+                }
+  ],
+  "gw_configures" :{
+      "plugin_name": "gitlab插件",
+      "plugin_for_app_name": "gitlab",
+      "plugin_for_app_version": "V1",
+      "plugin_version": "1.0.0",
+      "plugin_need_engine_version": "1.0",
+      "plugin_author": "TigerSec",
+      "plugin_description": "gitlab插件",
+      "plugin_last_updated": "2025-12-18",
 
-**Finance systems:**
 
-| Finance Software | Supported Versions | Compatibility | Go-live Time |
-|------------------|--------------------|---------------|--------------|
-| **Yonyou Changjie** | T+/T6 | ✅ Prebuilt | 30 min |
-| **Kingdee KIS** | Pro/Flagship | ✅ Prebuilt | 30 min |
-| **Inspur Finance** | Mainstream versions | ✅ Prebuilt | 30 min |
-| **Other finance** | - | ⚠️ Custom | 1 day |
 
-**HR systems:**
-
-| HR System | Supported Versions | Compatibility | Go-live Time |
-|-----------|--------------------|---------------|--------------|
-| **Beisen** | Mainstream | ✅ Prebuilt | 30 min |
-| **Yonyou HR** | NC-HR/U8-HR | ✅ Prebuilt | 30 min |
-| **Kingdee HR** | K3-HR/EAS-HR | ✅ Prebuilt | 30 min |
-| **Custom HR** | - | ⚠️ Custom | 1 day |
-
-**CRM systems:**
-
-| CRM System | Supported Versions | Compatibility | Go-live Time |
-|------------|--------------------|---------------|--------------|
-| **Yonyou CRM** | U9/NC-CRM | ✅ Prebuilt | 30 min |
-| **Kingdee CRM** | K3-CRM | ✅ Prebuilt | 30 min |
-| **Fxiaoke** | Mainstream | ✅ Prebuilt | 30 min |
-| **Xiaoshouyi** | Mainstream | ✅ Prebuilt | 30 min |
-| **Other custom CRM** | - | ⚠️ Custom | 1 day |
-
-**Other custom systems:**
-- MES, BI, ticketing, etc.: ⚠️ Custom, ~1 day to go live
-
-**Extra notes:**
-- ✅ Prebuilt: out of the box, just select the plugin
-- ⚠️ Custom: vendor can assist; usually 1–2 days
-
----
-
-### Q2.3: If we use a niche or custom app, can you support it?
-
-**A:** Yes, if the following hold; follow the plugin guide or request vendor plugin service.
-
-**Must have:**
-- ✅ HTTP/HTTPS-based
-- ✅ Web login page (form submit or API call)
-- ✅ Session cookie or token after login
-
-**Supported with customization:**
-- ⚠️ Multi-step login (e.g., phone verify then password)
-- ⚠️ Complex CAPTCHA (OCR integration)
-- ⚠️ Dynamic token (CSRF protection)
-
-**Not supported:**
-- ❌ Pure desktop client (C/S, non-B/S)
-
-**Additional note:**  
-> 99% of HTTP/HTTPS web apps can be supported. Provide a test account; engineering can verify remotely, typically giving a feasibility verdict within 2 hours. This check is free.
-
----
-
-### Q2.4: Does mobile (phone/iPad) work?
-
-**A:** Fully supported, with better experience:
-
-**Supported:**
-- ✅ Mobile browsers
-- ✅ H5 inside WeCom/DingTalk/Feishu
-- ✅ WeChat mini program (e.g., OA mini program)
-- ✅ iPad tablet access
-
-**Mobile advantages:**
-- No app or VPN client to install
-
----
-
-### Q2.5: Bandwidth requirements? Will it slow access?
-
-**A:**
-
-**Bandwidth:**
-- Cloud gateway: no special requirement, carrier backbone (BGP multi-line)
-- Private gateway: recommend uplink ≥10 Mbps (for ~200 users)
-
-**Latency impact:**
-| Scenario | Added latency | Note |
-|----------|---------------|------|
-| Cloud GW (same city) | +10–30 ms | Barely noticeable |
-| Cloud GW (cross-province) | +30–80 ms | Slight |
-| Private GW (local) | +5–10 ms | Negligible |
-
-**Optimizations:**
-- Static asset caching (JS/CSS/images)
-- Gzip compression (50%+ traffic cut)
-- Connection pooling (fewer handshakes)
-
-**Measured data:**  
-> Manufacturing customer (300 users), Fanwei OA: login time from 3.2s down to 1.8s (cache benefit); business ops unchanged.
-
----
-
-### Q2.6: Will it conflict with existing firewall/WAF?
-
-**A:** No; they are complementary:
-
-**Network topology:**
+      "plugins": [
+        "redirect",
+        "uri_bypass",
+        {
+          "name": "exposure_auth",
+          "conf": {
+            "reject_unauthed": true,
+            "response_code": 403
+          }
+        },
+        "app_logger"
+      ],
+      "plugin_confs": {
+        "uri_bypass": {
+          "filters": ["^/health$"]
+        }
+      }
+    }
+}
 ```
-User → WAF → Gateway (WEB Invisishield) → Internal FW → Backend app
+#### 插件配置头说明
+```json
+  "plugin_name": "gitlab插件",
+  "plugin_for_app_name": "gitlab",
+  "plugin_for_app_version": "V1",
+  "plugin_version": "1.0.0",
+  "plugin_need_engine_version": "1.0",
+  "plugin_author": "TigerSec",
+  "plugin_description": "gitlab插件",
+  "plugin_last_updated": "2025-12-18",
 ```
 
-**Roles:**
-- WAF: Web attack protection (SQLi, XSS, etc.)
-- WEB Invisishield: Attack-surface reduction, identity, login hardening
-- Internal FW: Network-layer ACL
+  以上字段必须要有，plugin_for_app_name和plugin_for_app_version和plugin_description要给界面用户选择的。
+  plugin_need_engine_version 需要多少版本之上的引擎
 
-**Config tip:**
-- FW ACL: allow only gateway IP to reach backend (further reduction)
 
----
+#### 上述配置中：
+- `"redirect"` - 字符串格式，在 `plugin_confs` 中未定义，使用**全局默认配置**
+- `"uri_bypass"` - 字符串格式，使用 `plugin_confs` 中定义的**应用作用域配置**
+- `{"name": "exposure_auth", ...}` - 对象格式，直接使用**内联的 conf 配置**（优先级最高）
+- `"app_logger"` - 字符串格式，在 `plugin_confs` 中未定义，使用**全局默认配置**
 
-### Q2.7: What’s the difference between WAF and WEB Invisishield?
+## 配置结构
 
-**A:** They complement each other and address different layers:
+### 完整配置示例
 
-| Dimension | WAF | WEB Invisishield |
-|-----------|-----|------------------|
-| **Core role** | Detect/block known attacks | Attack-surface reduction & identity |
-| **Defense mode** | Passive: analyze traffic signatures | Active: hide the app, attacker finds no target |
-| **Target** | Known vulns (SQLi, XSS, etc.) | Login security (brute force, weak passwords), non-login surface reduction |
-| **Exposure** | ❌ Does not solve exposure | ✅ Core capability |
-| **App changes** | Not needed | **Not needed** |
-| **0-day** | Cannot defend | **Can** |
-| **Bypass games** | Signature-based, cat-and-mouse | **Surface reduction, little bypass space** |
+```json
+{
+"user_configures": [
+                {
+                    "json_path": "gw_configures.plugins.exposure_auth.conf.response_code",
+                    "type_comment": "int,text,bool,json,select（单选）和mult_select（多选），并且增加预选值options. select和mult_select的时候还需要定义value_type",
+                    "type": "int",
+                    "value": 403,
+                    "description": "没有认证的流量处理方式 response_code"
+                },
+                {
+                    "json_path": "gw_configures.plugins.exposure_auth.conf.response_msg",
 
-**Capability comparison:**
+                    "type": "text",
+                    "value": "禁止访问",
+                    "description": "没有认证的流量处理方式 response_msg"
+                },
+                {
+                    "json_path": "gw_configures.plugins.exposure_auth.conf.response_msg",
 
-| Capability | WAF | WEB Invisishield | Note |
-|------------|-----|------------------|------|
-| Attack-surface reduction | ❌ | ✅ **Strong** | Unique to Invisishield |
-| Brute-force login | ⚠️ Basic rate limit | ✅ **Strong** | Core |
-| Weak password blocking | ❌ | ✅ **Unique** | Core |
-| SQLi protection | ✅ Strong | ⚠️ Medium | WAF specialty |
-| XSS protection | ✅ Strong | ⚠️ Medium | WAF specialty |
+                    "type": "enum",
+                    "value_type": "text",
+                    "value": ["禁止访问","xxx"],
+                    "description": "没有认证的流量处理方式 response_msg"
+                }
+  ],
+  "gw_configures":{
+    "plugin_name": "gitlab插件",
+    "plugin_for_app_name": "gitlab",
+    "plugin_for_app_version": "V1",
+    "plugin_version": "1.0.0",
+    "plugin_need_engine_version": "1.0",
+    "plugin_author": "TigerSec",
+    "plugin_description": "gitlab插件",
+    "plugin_last_updated": "2025-12-18",
 
-**Best-practice combo:**
+
+    "plugins": [
+      "redirect",
+      "client_ip",
+      "uri_bypass",
+      "anony_attack_blocker",
+      {
+        "name": "exposure_auth",
+        "conf": {
+          "reject_unauthed": true,
+          "response_code": 403,
+          "response_msg": "禁止访问"
+        }
+      },
+      "app_logger"
+    ],
+    "plugin_group_id": "default_group_id(引用已定义的插件组（与 plugins 二选一）)"
+    "sub_routes": [
+      {
+        "name": "登录接口",
+        "plugin_group_id": "login_gid",
+        "routes": [
+          {
+            "uri": "/api/login",
+            "methods": ["POST"]
+          }
+        ]
+      },
+      {
+        "name": "移动端登录接口",
+        "plugin_group_id": "mobile_login_gid",
+        "routes": [
+          {
+            "uri": "/api/login",
+            "methods": ["POST"],
+            "vars": [
+              ["$arg_type", "==", "mobile"]
+            ]
+          }
+        ]
+      },
+      {
+        "name": "白名单接口",
+        "plugins": [],
+        "routes": [
+          {
+            "uri": "/api/public_info",
+            "methods": ["GET", "POST"]
+          },
+          {
+            "uri": "/health",
+            "methods": ["GET"]
+          }
+        ]
+      }
+    ],
+
+    "plugin_groups": {
+      "login_gid": [
+        "redirect",
+        "passwd_restriction",
+        {
+          "name": "exposure_login",
+          "conf": {
+            "fetch_vars": {
+              "user_id": {
+                "source": "response_body",
+                "field": "data.user.id",
+                "parser": "json"
+              }
+            },
+            "user_id_var": "user_id",
+            "success_expr": ["AND",
+              ["${upstream_status}", "==", 200],
+              ["${user_id}", "!=", ""]
+            ],
+            "log_request": true
+          }
+        },
+        "gzip"
+      ],
+      "mobile_login_gid": [
+        "redirect",
+        "passwd_restriction",
+        {
+          "name": "exposure_login",
+          "conf": {
+            "fetch_vars": {
+              "user_id": {
+                "source": "response_body",
+                "field": "data.uid",
+                "parser": "json"
+              }
+            },
+            "success_expr": ["${upstream_status}", "==", 200],
+            "user_id_var": "${user_id}"
+
+          }
+        },
+        "gzip"
+      ]
+    },
+
+    "plugin_confs": {
+      "anony_attack_blocker": {
+        "allow_request": false,
+        "policy": "local"
+      },
+      "passwd_bruteforce": {
+        "allow_degradation": false,
+        "rejected_msg": "{\"code\":10206,\"msg\":\"非法攻击\",\"status\":false}"
+      },
+      "passwd_restriction": {
+        "rejected_code": 200,
+        "rejected_msg": "弱密码禁止登录",
+        "block_request": false
+      },
+      "uri_bypass": {
+        "filters": [
+          "^/public/.*",
+          "^/static/.*"
+        ]
+      },
+      "exposure_user": {
+        "key_name":"xxxxx",
+        "sub_requests": [
+          {
+            "name": "get_user",
+            "desc": "获取用户",
+            "uri": "/api/userinfo",
+            "method": "GET",
+            "headers": {
+              "Cookie": "$http_cookie"
+            },
+            "fetch_vars": {
+              "user_id": {
+                "source": "response_body",
+                "field": "data.uid",
+                "parser": "json"
+              }
+            },
+            "success_expr": ["${upstream_status}", "==", 200],
+          }
+        ],
+        "user_id_var": "${get_user.user_id}",
+        "user_name_var": "${get_user.user_name}"
+      }
+    }
+  }
+}
 ```
-Recommended:
-User → WAF (known attacks) → WEB Invisishield (surface reduction + auth) → App
 
-Effects:
-- WAF: blocks SQLi, XSS, etc.
-- Invisishield: invisibility + login hardening + weak password治理
-- Dual-layer, complementary
+### 配置项说明
+
+| 配置项 | 说明 |
+|--------|------|
+| 版本信息字段 | 若干版本信息字段，必填 |
+| `user_configures` | 提供用户界面配置项目 ，选项 |
+| `plugins` | 应用主插件组，直接定义插件列表，处理除特殊接口外的所有请求 |
+| `plugin_group_id` | 引用已定义的插件组 ID，与 `plugins` **二选一**，`plugins` 优先级更高 |
+| `sub_routes` | 子路由配置，用于特殊接口（如登录接口）使用不同的插件组 |
+| `plugin_groups` | 应用作用域的插件组定义，可被子路由或 `plugin_group_id` 引用 |
+| `plugin_confs` | 应用作用域的插件配置，插件组内只写插件名时从此处查找配置 |
+
+**注意**：`plugins` 和 `plugin_group_id` 二选一配置：
+- `plugins`：直接在应用配置中定义插件列表
+- `plugin_group_id`：引用 `plugin_groups` 中定义的插件组，适合插件组复用场景
+- 如果同时配置，`plugins` 优先级更高
+
+### 用户界面配置
+```json
+ "user_configures": [
+                {
+                    "label":"未认证请求",
+                    "json_path": "gw_configures.plugins.exposure_auth.conf.response_code",
+                    "type_comment": "int,text,bool,json,select（单选）和mult_select（多选），并且增加预选值options. select和mult_select的时候还需要定义value_type",
+                    "type": "int",
+                    "value": 403,
+                    "description": "没有认证的流量处理方式 response_code"
+                },
+                {
+                    "label":"未认证请求返回信息",
+                    "json_path": "gw_configures.plugins.exposure_auth.conf.response_msg",
+
+                    "type": "text",
+                    "value": "禁止访问",
+                    "description": "没有认证的流量处理方式 response_msg"
+                },
+                {
+                    "label":"未认证请求返回信息",
+                    "json_path": "gw_configures.plugins.exposure_auth.conf.response_msg",
+
+                    "type": "enum",
+                    "value_type": "text",
+                    "value": ["禁止访问","xxx"],
+                    "description": "没有认证的流量处理方式 response_msg"
+                }
+  ]
+  ```
+  **字段说明**：
+  - `label`： label 展示给用户看的标签
+  - `json_path`： json路径，界面会按照配置用户配置自定制的值，界面保存的时候会替换对应的json_path的对应的值
+  - `type`: 字段类型，int,text,bool,json,select（单选）和mult_select（多选），并且增加预选值options. select和mult_select的时候还需要定义value_type
+  - `value`：字段值，当type为select/mult_select的时候，value为数组，数组里的字段类型为value_type指定
+  - `value_type`：只有在select/mult_select的时候才有效
+  - `description`：展示给用户看的描述
+
+### 子路由配置
+
+子路由用于为特殊接口配置不同的插件组。使用 `resty.radixtree`（基数树）进行高效的路径匹配。
+
+**注意**：由于主应用已经根据 Host 进行了匹配，子路由匹配时**不再进行 Host 匹配**，仅匹配 URI、HTTP 方法和自定义条件。
+
+详细配置说明见 [sub-route.md](sub-route.md)。
+
+
+```json
+{
+  "name": "子路由名称",
+  "plugin_group_id": "引用的插件组ID",
+  "routes": [
+    {
+      "uri": "/api/login",
+      "methods": ["POST"],
+      "vars": [
+        ["$arg_type", "==", "mobile"]
+      ]
+    }
+  ]
+}
 ```
 
-**Budget-limited choice:**
+**字段说明**：
+- `uri` / `uris` - 匹配的 URI 路径（支持精确匹配、前缀匹配 `/*`、参数匹配 `/:id`）
+- `methods` - 匹配的 HTTP 方法
+- `vars` - 额外的匹配条件（可选），使用 [lua-resty-expr](lua-resty-expr.md) 语法
 
-| Scenario | Recommended | Reason |
-|----------|-------------|--------|
-| OA/ERP/Finance/HR/CRM exposed to Internet | **Prioritize WEB Invisishield** | Remove exposure; attacker can’t find target |
-| App already hidden, complex biz | **Consider WAF** | Business-logic vuln defense |
-| Budget sufficient | **WAF + WEB Invisishield** | Best practice |
+**vars 变量来源**：`vars` 中参与匹配的变量来源于 `ctx.var`，为平台内置变量（包括 WEB隐身盾 变量），常用变量如：
+- `arg_xxx` - URL 查询参数
+- `http_xxx` - 请求头（如 `http_user_agent`）
+- `cookie_xxx` - Cookie 值
+- `remote_addr` - 客户端 IP
+- `uri`、`host`、`method` 等 WEB隐身盾 内置变量
 
-**Additional note:**  
-> WAF inspects traffic for attack patterns; WEB Invisishield hides the app so attackers can’t find it. Best is both for defense-in-depth. With tight budgets, for high-risk OA start with Invisishield.
+详细变量列表见 [ctx-var.md](ctx-var.md)。
 
-**Common questions:**
+## 白名单配置
 
-**Q: We already have WAF; still need WEB Invisishield?**  
-**A:** Yes, recommended. WAF handles known attacks but not exposure. With an OA 0-day, WAF rules may lag; attackers may still break in. Invisishield makes the app invisible and stops attacks at the source. Together they’re stronger.
+支持两种方式配置白名单 URL，跳过安全检测：
 
-**Q: Can WEB Invisishield replace WAF?**  
-**A:** Not fully, but it covers most core scenarios. Invisishield focuses on surface reduction, login security, and unauthorized access blocking; it has basic SQLi/XSS protection but WAF is more specialized there. Choose based on needs and budget.
+| 方式 | 插件/配置 | 性能 | 适用场景 |
+|------|----------|------|---------|
+| 子路由白名单 | `sub_routes` + `plugins: []` | **更高**（基数树匹配） | 需要 HTTP 方法或条件匹配 |
+| 正则白名单 | `uri_bypass` | 一般（正则匹配） | 需要复杂正则匹配（如扩展名） |
 
----
+**详细配置说明见：** [白名单.md](白名单.md)
 
-## 3. Security Capabilities
+## 适配流程
 
-### ⭐ Q3.1: How is attack-surface reduction achieved? Can attackers really not scan it?
+针对暴露面收敛场景，应用适配主要包括以下步骤：
 
-**A:** Via **reverse proxy + covert forwarding**:
+1. **分析应用认证机制**：确定登录接口、认证凭据、登录成功标识
+2. **分析用户信息获取接口**：找到可验证登录状态并获取用户信息的接口
+3. **分析白名单接口**：梳理无需认证即可访问的接口
+4. **配置核心代码插件**：`exposure_session`、`exposure_user`、`exposure_auth`、`exposure_login`
+5. **配置白名单**：使用子路由或正则白名单
+6. **测试验证**：验证登录、认证、白名单等功能
 
-**Traditional (exposed):**
-```
-Internet → oa.company.com (public IP 1.2.3.4) → OA server
+**详细分步配置指南见：** [5分钟编写应用插件.md](5分钟编写应用插件.md#分步配置指南)
 
-Attacker scan:
-nmap 1.2.3.4 → finds 8080 open → fingerprints Fanwei OA → exploits
-```
+## 参考链接
 
-**WEB Invisishield (hidden):**
-```
-Internet → oa.company.com (resolves to gateway) → gateway verifies identity → internal 10.0.1.100:8080
-
-Attacker scan:
-nmap oa.company.com → only sees 443 (gateway) → cannot fingerprint backend → nowhere to attack
-```
-
-**Key techniques:**
-1. **DNS:** App domain points to gateway, not real app IP
-2. **Gateway identity check:** Without identity, request rejected
-3. **Fingerprint hiding:** Gateway masks response headers to avoid app type/version leakage
-4. **Login hardening:** Protects login from brute force/weak passwords
-
-**Measured effect:**  
-> Customer with Fanwei OA: thousands of daily scans before; after onboarding, attacks dropped to zero (no surface to find).
-
----
-
-### Q3.2: How is weak password detection done?
-
-**A:**
-
-**When:** During user login  
-**How:**  
-1. Hash compare: password MD5 matched against weak password DB (1M+ common weak passwords)  
-2. Rule check: length, complexity (upper/lower/digit/special)  
-3. Personal info check: disallow name/employee ID/birthday as password  
-
-**Additional note:**  
-> Similar to airport scanning luggage for hazards without viewing contents; system only checks strength and doesn’t store plaintext passwords, protecting user privacy.
-
----
-
-### Q3.3: How is brute-force protection implemented?
-
-**A:**
-
-**Policy:**
-```yaml
-Trigger: Same IP/user 5 failed logins within 5 minutes
-Action:
-  - Block IP for 5 minutes
-  - Trigger alert
-```
-
-**Compared with traditional:**
-| Solution | Where | Limitation | Invisishield advantage |
-|----------|-------|------------|------------------------|
-| Built-in app | OA itself | Rigid rules, hard to unify | Gateway unified policy, extra layer |
-| WAF | Perimeter | Only known attack signatures | Surface reduction + weak password治理 |
-| Firewall | Network layer | Can’t see business layer | HTTP-deep, precise block |
-
----
-
-### Q3.4: Does zero-change support MFA?
-
-**A:** v1.2 supports below MFA:
-
-| MFA | Note | Version |
-|-----|------|---------|
-| **OTP token** | Google Authenticator etc. | v1.0 |
-
-**Recommended (v1.2):**
-- Regular staff: account/password login
-- MFA optional bind; currently OTP supported
-
----
-
-## 4. Deployment & Network
-
-### ⭐ Q4.1: Cloud gateway vs. private gateway?
-
-**A:**
-
-| Dimension | Cloud Gateway (recommended) | Private Gateway |
-|-----------|-----------------------------|-----------------|
-| **Deployment** | Turnkey | Customer deploys (VM/container) |
-| **Scenarios** | Fast go-live, small orgs | Sensitive data, compliance, large orgs |
-| **Ops** | Vendor-operated, auto-upgrade | Customer-operated |
-| **Latency** | Depends on node distance | Local, minimal latency |
-| **HA** | Default multi-node redundancy | Customer builds HA |
-| **Compliance** | Data passes vendor gateway | Data stays on-prem |
-
-**Choice tips:**
-- **Prefer cloud:** <200 users, tight budget, need fast go-live
-- **Choose private:** Need dedicated gateway, highly sensitive data (finance/defense), strict compliance, large scale (1000+)
-
-**Additional note:**  
-> ~80% choose cloud for 1-day go-live. If data compliance demands on-prem, private is supported too.
-
----
-
-### Q4.2: Is private gateway deployment complex? What’s needed?
-
-**A:**
-
-**Minimum spec:**
-- CPU: 2 cores
-- RAM: 2 GB
-- Disk: 100 GB
-- Network: Dual NIC (LAN+WAN) or single routable NIC
-- OS: Ubuntu 18.04+ / Docker / K8s
-
-**Deployment:**
-1. Software installation; see “Private Gateway Deployment Guide”
-
-**Tech support:**
-- Detailed docs
-- Remote assist for Professional/Annual plans
-
----
-
-### Q4.3: What if a single gateway fails? HA options?
-
-**A:**
-
-**Cloud gateway (built-in HA):**
-- Multi-node redundancy (≥2 per region)
-- Auto failover (SLB load balancer)
-- SLA: 99.9% availability (Pro/Annual)
-
-**Private gateway (needs setup):**
-- **Load-balancing mode:** multiple gateways + LB (Nginx/F5/Cloud LB)
-
-**Emergency:**
-- Keep a backup access path (temp revert to old login)
-- 24×7 emergency response (Pro/Annual)
-
----
-
-### Q4.4: What changes on the app server?
-
-**A:** Only **network reachability** tweaks, no app changes:
-
-**Must:**
-1. **DNS:** Point access domain (e.g., oa.company.com) to gateway (CNAME)
-
-**Optional hardening:**
-1. **ACL:** Firewall only allows gateway IP to access app (further reduction)
-2. **Close public exposure:** If OA had public IP, close it
-
-**Not needed:**
-- ❌ No agent
-- ❌ No app code changes
-- ❌ No DB changes
-- ❌ No existing FW rule removals (only add)
-
----
-
-## 5. Implementation & Delivery
-
-### ⭐ Q5.1: How long from purchase to go-live?
-
-**A:**
-
-**Standard flow:**
-| Phase | Duration | Key action |
-|-------|----------|------------|
-| Account setup | Instant | Auto admin access |
-| Config/impl | Half day | Configure app, plugin build/test |
-| Test/verify | Half day | IT host testing, fix issues |
-| Pilot | 1 day | Small rollout, collect feedback |
-| Full go-live | 1 day | Company-wide cutover |
-
-**Total: ~3 working days**
-
----
-
-### Q5.2: Will implementation impact current business?
-
-**A:** **Host testing doesn’t; DNS cutover is the impact point; rollback via DNS anytime.**
-
-**Characteristics:**
-- ✅ Parallel deploy: gateway independent from existing system
-- ✅ Host testing: change host file for testing, no prod impact
-- ✅ Gradual: DNS cutover in stages; small pilot before full
-
-**Risk control:**
-1. **Test first:** Use test environment if available
-2. **Off-peak cutover:** Change DNS in low-traffic window (e.g., 10pm)
-3. **Fallback:** If issues, DNS rollback within 5 minutes
-
-**Customer case:**  
-> Manufacturing, 600-user Fanwei OA. Config Friday night, full cutover Monday morning. Zero weekend impact; minor user adaptation Monday, solved after short training.
-
----
-
-## 6. Support & Services
-
-### ⭐ Q6.1: How fast is support response?
-
-**A:** Tiered by plan:
-
-| Plan | Response | Channel | Hours |
-|------|----------|---------|-------|
-| **Trial** | 48h | Online | Workdays 9:00–18:00 |
-| **Standard** | 4h | Online | Workdays 9:00–21:00 |
-| **Professional** | 1h | Phone+Online | 7×12 |
-| **Annual** | 30min | Dedicated group+Phone+Online | 7×24 |
-
-**P0 emergency:**
-- Definition: Core business down, widespread login failure
-- Response: Pro/Annual 15 min; engineers can remote in if needed
-
-**Additional note:**  
-> Pro promises 1h, average ~15 min. Annual gets dedicated support group, typically <5 min.
-
----
-
-### Q6.2: Is onsite service available?
-
-**A:**
-
-**Standard (remote):**
-- All plans default remote (Zoom/Tencent Meeting/TeamViewer)
-- 90% issues resolved remotely
-
-**Onsite (optional purchase):**
-- For: very large deployments (1000+), complex networks, explicit request
-- Price: 1500 RMB/person/day (travel extra)
-- Staff: Vendor-certified service center
-- Includes: site survey, design, implementation, training
-
----
-
-### Q6.3: Will the product keep updating? Any upgrade fee?
-
-**A:**
-
-**Frequency:**
-- Minor (bugfix): monthly 1–2
-- Major (new features): quarterly 1
-- Security patches: emergency as needed
-
-**Upgrade:**
-- Cloud GW: auto, no user impact (overnight)
-- Private GW: upgrade package + guide
-
-**Cost:**
-- ✅ Free during contract
-- ✅ Includes new features, security patches, plugin updates
-- ✅ Includes major version jump (v1.x → v2.x)
-
-**Examples:**
-- 2024 Q4: added “Weak Password Governance Report” — free to paid users
-- 2024 Q3: added Feishu IdP support — free for all editions
-
----
-
-### Q6.4: If we don’t renew, can we export data?
-
-**A:** Yes, with **data migration support**:
-
-**Exportable:**
-- ✅ Access logs
-- ✅ Basic configuration
-
-**Migration help:**
-- Provide APIs to migrate elsewhere
-- Notify 30 days before expiry for ample time
-
-**Additional note:**  
-> We don’t lock in your data. After expiry, configs and logs can be exported to switch plans or revert architecture.
-
----
-
-## 7. Industry & Compliance
-
-### Q7.1: Does it meet MLPS 2.0 (China) requirements?
-
-**A:** Yes, it can help you pass MLPS assessments:
-
-| Control | MLPS requirement | Invisishield implementation |
-|---------|------------------|-----------------------------|
-| **Identity** | Multi-factor | Supports OTP MFA |
-| **Access control** | Least privilege | No access before auth; page-level control |
-| **Audit** | Logs ≥6 months | Supported (Annual can keep 6 months or extra purchase) |
-| **Intrusion prevention** | Anti brute-force | Brute-force protection, login lockout |
-| **Data secrecy** | Encrypted transport | Enforce HTTPS (TLS 1.2+) |
-
-**Assessment materials:**
-- Security whitepaper
-- MLPS control mapping
-- Assistance configuring assessment-ready policies
-
-
----
-
-**Document version:** v1.0  
-**Last updated:** Dec 2025  
-
-
+- [exposure_auth 插件配置](exposure_auth.md)
+- [exposure_login 插件配置](exposure_login.md)
+- [exposure_user 插件配置](exposure_user.md)
+- [正则白名单 URI 配置](uri_bypass.md)
+- [子路由配置](sub-route.md)
+- [请求上下文变量](ctx-var.md)
+- [lua-resty-expr 表达式语法](lua-resty-expr.md)
+- [路径提取语法](path-syntax.md)

@@ -1,0 +1,410 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tiger-sec.cn/schemas/web-stealth-shield/plugin-config.json",
+  "title": "零改造引擎插件配置",
+  "description": "WEB隐身盾零改造引擎应用插件配置 JSON Schema，依据插件合规性审计清单",
+  "type": "object",
+  "required": ["desc", "gw_configures"],
+  "properties": {
+    "desc": {
+      "$ref": "#/$defs/desc"
+    },
+    "user_configures": {
+      "$ref": "#/$defs/user_configures"
+    },
+    "gw_configures": {
+      "$ref": "#/$defs/gw_configures"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "desc": {
+      "type": "object",
+      "description": "应用插件元信息，必须位于顶层",
+      "required": [
+        "plugin_name",
+        "plugin_for_app_name",
+        "plugin_for_app_version",
+        "plugin_version",
+        "plugin_need_engine_version",
+        "plugin_author",
+        "plugin_description",
+        "plugin_last_updated"
+      ],
+      "properties": {
+        "plugin_name": { "type": "string", "description": "应用插件名称（必填）" },
+        "plugin_for_app_name": { "type": "string", "description": "目标应用名称（必填）" },
+        "plugin_for_app_version": { "type": "string", "description": "目标应用版本（必填）" },
+        "plugin_version": { "type": "string", "description": "应用插件版本（必填）" },
+        "plugin_need_engine_version": { "type": "string", "description": "所需引擎最低版本（必填）" },
+        "plugin_author": { "type": "string", "description": "作者（必填）" },
+        "plugin_description": { "type": "string", "description": "描述信息（必填）" },
+        "plugin_last_updated": { "type": "string", "description": "最后更新日期（必填）" }
+      },
+      "additionalProperties": false
+    },
+    "user_configures": {
+      "type": "array",
+      "description": "UI 配置项映射，通过 json_path 指向 gw_configures（可选）",
+      "items": {
+        "$ref": "#/$defs/user_configure_item"
+      }
+    },
+    "user_configure_item": {
+      "type": "object",
+      "required": ["json_path", "type", "description"],
+      "properties": {
+        "label": { "type": "string", "description": "UI 显示标签（可选）" },
+        "lable": { "type": "string", "description": "UI 显示标签，兼容拼写（可选）" },
+        "json_path": {
+          "type": "string",
+          "description": "指向 gw_configures 的 JSON Path（必填）"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["int", "text", "bool", "json", "select", "mult_select", "enum"],
+          "description": "配置项类型（必填）"
+        },
+        "value_type": {
+          "type": "string",
+          "description": "值类型，select/mult_select 时必填"
+        },
+        "value": {},
+        "description": { "type": "string", "description": "描述信息（必填）" },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": { "type": "string" },
+              "value": {}
+            }
+          },
+          "description": "选项列表（select/mult_select 时必填）"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "enum": ["select", "mult_select"] } },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["value_type", "options"]
+          }
+        }
+      ]
+    },
+    "gw_configures": {
+      "type": "object",
+      "description": "网关配置，下发给网关的完整配置",
+      "properties": {
+        "plugins": {
+          "$ref": "#/$defs/plugins_array",
+          "description": "主插件组（与 plugin_group_id 二选一必填）"
+        },
+        "plugin_group_id": {
+          "type": "string",
+          "description": "引用插件组 ID（与 plugins 二选一必填，不推荐）"
+        },
+        "sub_routes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sub_route" },
+          "description": "子路由配置（可选）"
+        },
+        "plugin_groups": {
+          "type": "object",
+          "description": "已废弃，新规范禁止使用（可选）"
+        },
+        "plugin_confs": {
+          "$ref": "#/$defs/plugin_confs",
+          "description": "插件配置（可选）"
+        }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        { "required": ["plugins"] },
+        { "required": ["plugin_group_id"] }
+      ]
+    },
+    "plugins_array": {
+      "type": "array",
+      "description": "插件列表，支持字符串或内联配置对象。禁止包含 regex_whiteuri、exposure_session、exposure_user",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string",
+            "not": { "const": "regex_whiteuri" },
+            "description": "插件名称，禁止 regex_whiteuri"
+          },
+          {
+            "type": "object",
+            "required": ["name", "conf"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "not": { "enum": ["regex_whiteuri", "exposure_session", "exposure_user"] },
+                "description": "exposure_session 和 exposure_user 必须在 plugin_confs 中配置"
+              },
+              "conf": { "type": "object" }
+            }
+          }
+        ]
+      }
+    },
+    "sub_route": {
+      "type": "object",
+      "required": ["name", "routes"],
+      "properties": {
+        "name": { "type": "string", "description": "子路由名称（必填）" },
+        "desc": { "type": "string", "description": "子路由描述（可选）" },
+        "plugins": {
+          "$ref": "#/$defs/plugins_array",
+          "description": "内联插件列表（与 plugin_group_id 二选一必填）"
+        },
+        "plugin_group_id": {
+          "type": "string",
+          "description": "引用插件组（与 plugins 二选一必填，不推荐）"
+        },
+        "routes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/route_item" },
+          "minItems": 1,
+          "description": "路由匹配规则（必填）"
+        }
+      },
+      "oneOf": [
+        { "required": ["plugins"] },
+        { "required": ["plugin_group_id"] }
+      ]
+    },
+    "route_item": {
+      "type": "object",
+      "properties": {
+        "uri": { "type": "string", "description": "匹配的 URI 路径（与 uris 二选一必填）" },
+        "uris": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "匹配的多个 URI（与 uri 二选一必填）"
+        },
+        "methods": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+          },
+          "description": "HTTP 方法（可选）"
+        },
+        "vars": {
+          "type": "array",
+          "description": "额外匹配条件，lua-resty-expr 语法（可选）"
+        }
+      },
+      "oneOf": [
+        { "required": ["uri"] },
+        { "required": ["uris"] }
+      ]
+    },
+    "plugin_confs": {
+      "type": "object",
+      "description": "各插件配置，key 为插件名",
+      "additionalProperties": {
+        "type": "object"
+      },
+      "properties": {
+        "uri_bypass": {
+          "type": "object",
+          "description": "正则白名单，filters 为扁平正则字符串数组",
+          "properties": {
+            "filters": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "URI 正则数组，禁止 filters[].regex_uris 嵌套格式（可选）"
+            },
+            "rules": {
+              "type": "array",
+              "description": "支持 IP 的复杂规则（可选）",
+              "items": {
+                "type": "object",
+                "required": ["name", "uris"],
+                "properties": {
+                  "name": { "type": "string", "description": "规则名称（必填）" },
+                  "uris": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "URI 正则列表（必填）"
+                  },
+                  "ip_whitelist": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "IP 白名单，支持 CIDR（可选）"
+                  },
+                  "ip_blacklist": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "IP 黑名单（可选）"
+                  },
+                  "ip_black_areas": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["province"],
+                      "properties": {
+                        "province": { "type": "string" },
+                        "city": { "type": "string" }
+                      }
+                    },
+                    "description": "IP 地域黑名单（可选）"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "exposure_session": {
+          "type": "object",
+          "description": "会话管理，必须在 plugin_confs 中配置",
+          "required": ["key_name"],
+          "properties": {
+            "key_name": {
+              "type": ["string", "array"],
+              "description": "认证 key，如 cookie_WISID、cookie_xxx、http_xxx（必填）"
+            },
+            "cookie": {
+              "type": "object",
+              "description": "WISID cookie 属性（可选）",
+              "properties": {
+                "domain": { "type": "string", "description": "cookie 域（可选）" },
+                "expires": { "type": "number", "description": "过期时间秒（可选）" },
+                "path": { "type": "string", "description": "路径（可选）" },
+                "secure": { "type": "boolean", "description": "Secure 属性（可选）" },
+                "httponly": { "type": "boolean", "description": "HttpOnly 属性（可选）" },
+                "samesite": { "type": "string", "description": "SameSite 属性（可选）" }
+              }
+            }
+          }
+        },
+        "exposure_user": {
+          "type": "object",
+          "description": "用户信息获取，必须在 plugin_confs 中配置",
+          "required": ["key_name", "sub_requests"],
+          "properties": {
+            "key_name": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "string" } }
+              ],
+              "description": "认证 key，如 cookie_xxx、http_authorization，支持多候选（必填）"
+            },
+            "cache_key_with_ip": { "type": "boolean", "description": "缓存 key 是否含 IP（可选）" },
+            "cache_succ_ttl": { "type": "number", "description": "成功结果缓存时间（秒）（可选）" },
+            "cache_fail_ttl": { "type": "number", "description": "失败结果缓存时间（秒）（可选）" },
+            "cache_size": { "type": "number", "description": "缓存大小（条数）（可选）" },
+            "connection_keepalive_timeout": { "type": "number", "description": "连接池空闲超时（毫秒）（可选）" },
+            "connection_keepalive_pool": { "type": "number", "description": "连接池最大连接数（可选）" },
+            "sub_requests": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["name", "uri", "success_expr"],
+                "properties": {
+                  "name": { "type": "string", "description": "子请求名称（必填）" },
+                  "desc": { "type": "string", "description": "子请求描述（可选）" },
+                  "uri": { "type": "string", "description": "子请求 URI（必填）" },
+                  "method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE"], "description": "HTTP 方法（可选）" },
+                  "query": { "type": "object", "description": "查询参数对象（可选）" },
+                  "headers": { "type": "object", "description": "请求头（可选）" },
+                  "body": { "type": "string", "description": "请求体（可选）" },
+                  "exec_expr": {
+                    "type": "array",
+                    "description": "条件表达式，控制子请求是否执行（可选）"
+                  },
+                  "connect_timeout": { "type": "number", "description": "连接超时（毫秒）（可选）" },
+                  "send_timeout": { "type": "number", "description": "发送超时（毫秒）（可选）" },
+                  "read_timeout": { "type": "number", "description": "读取超时（毫秒）（可选）" },
+                  "fetch_vars": {
+                    "type": "object",
+                    "description": "变量提取配置（可选）",
+                    "additionalProperties": {
+                      "oneOf": [
+                        { "type": "string" },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": ["request_body", "response_header", "response_body", "var_ref"]
+                            },
+                            "field": { "type": "string" },
+                            "parser": { "type": "string", "enum": ["json", "xml", "regex"] }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "success_expr": {
+                    "type": "array",
+                    "description": "lua-resty-expr 成功判定表达式（必填）"
+                  }
+                }
+              }
+            },
+            "user_id_var": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "string" } }
+              ],
+              "description": "格式 ${get_user.xxx}，推荐配置（可选）"
+            },
+            "user_name_var": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "string" } }
+              ],
+              "description": "格式 ${get_user.xxx}，推荐配置（可选）"
+            }
+          }
+        },
+        "uri_blocker": {
+          "type": "object",
+          "description": "URI 阻断插件配置",
+          "properties": {
+            "excludes": {
+              "type": "array",
+              "description": "排除规则（可选）",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "host": { "type": "string", "description": "host 匹配（可选）" },
+                  "uris": { "type": "array", "items": { "type": "string" }, "description": "URI 正则（可选）" }
+                }
+              }
+            },
+            "rules": { "type": "array", "description": "检测规则（可选）" },
+            "rejected_msg": { "type": "string", "description": "拒绝消息（可选）" }
+          }
+        },
+        "request_blocker": {
+          "type": "object",
+          "description": "请求内容检测插件配置",
+          "properties": {
+            "excludes": {
+              "type": "array",
+              "description": "排除规则（可选）",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "host": { "type": "string", "description": "host 匹配（可选）" },
+                  "uris": { "type": "array", "items": { "type": "string" }, "description": "URI 正则（可选）" }
+                }
+              }
+            },
+            "rules": { "type": "array", "description": "检测规则（可选）" },
+            "rejected_msg": { "type": "string", "description": "拒绝消息（可选）" }
+          }
+        }
+      }
+    }
+  }
+}

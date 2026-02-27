@@ -1,0 +1,370 @@
+{
+  "desc": {
+    "plugin_name": "grafana插件",
+    "plugin_for_app_name": "grafana",
+    "plugin_for_app_version": "V12.0.2",
+    "plugin_version": "1.0.0",
+    "plugin_need_engine_version": "1.0",
+    "plugin_author": "TigerSec",
+    "plugin_description": "grafana插件",
+    "plugin_last_updated": "2025-12-18"
+  },
+  "user_configures": [
+    {
+      "lable": "拒绝未认证请求",
+      "json_path": "gw_configures.plugins[8].conf.reject_unauthed",
+      "type": "bool",
+      "description": "除了白名单之外的未认证请求，是否拒绝"
+    },
+    {
+      "lable": "插入passwd js失败时拒绝登录请求",
+      "json_path": "gw_configures.sub_routes[0].plugins[6].conf.reject_uncaptured",
+      "type": "bool",
+      "description": "一般为非浏览器访问"
+    },
+    {
+      "lable": "弱密码登录请求",
+      "json_path": "gw_configures.sub_routes[0].plugins[7].conf.action",
+      "type": "select",
+      "value_type": "text",
+      "description": "对于检测为弱密码的登录请求的处理方式",
+      "options": [
+        {
+          "label": "放行",
+          "value": "allow"
+        },
+        {
+          "label": "阻断",
+          "value": "block"
+        }
+      ]
+    },
+    {
+      "lable": "暴力破解是否拦截",
+      "json_path": "gw_configures.sub_routes[0].plugins[8].conf.block_login",
+      "type": "bool",
+      "description": "达到限流阈值时，是否阻断登录请求"
+    },
+    {
+      "lable": "暴力破解IP加黑名单",
+      "json_path": "gw_configures.sub_routes[0].plugins[8].conf.block_ip",
+      "type": "bool",
+      "description": "达到次数限制时，是否将IP加入黑名单"
+    },
+    {
+      "lable": "暴力IP黑名单时间",
+      "json_path": "gw_configures.sub_routes[0].plugins[8].conf.block_ip_duration",
+      "type": "int",
+      "description": "黑名单IP的过期时间（秒）"
+    },
+    {
+      "lable": "暴力破解单位时间次数",
+      "json_path": "gw_configures.sub_routes[0].plugins[8].conf.count",
+      "type": "int",
+      "description": "时间窗口内允许的最大失败次数"
+    },
+    {
+      "lable": "暴力破解时间窗口",
+      "json_path": "gw_configures.sub_routes[0].plugins[8].conf.time_window",
+      "type": "int",
+      "description": "时间窗口（秒），在此时间窗口内统计账密失败次数"
+    },
+    {
+      "lable": "登录请求内容检测是否开启",
+      "json_path": "gw_configures.sub_routes[0].plugins[9].conf.inspect_content.enable",
+      "type": "bool",
+      "description": "命中内容检测规则时，是否开启登录名检测"
+    },
+    {
+      "lable": "登录请求内容检测SQL注入是否拦截",
+      "json_path": "gw_configures.sub_routes[0].plugins[9].conf.inspect_content.reject",
+      "type": "bool",
+      "description": "命中内容检测规则时，是否阻断登录请求"
+    }
+  ],
+  "gw_configures": {
+    "plugins": [
+      "redirect",
+      "client_ip",
+      "ip_restriction",
+      "ua_restriction",
+      "uri_blocker",
+      "request_blocker",
+      "uri_bypass",
+      "passwd_capture",
+      {
+        "name": "exposure_auth",
+        "conf": {
+          "reject_unauthed": true,
+          "log_unauthed": true,
+          "response_code": 403,
+          "response_msg": "禁止访问"
+        }
+      },
+      "proxy_rewrite",
+      "unzip",
+      "response_rewrite",
+      "gzip",
+      "app_logger"
+    ],
+    "sub_routes": [
+      {
+        "name": "登录接口",
+        "plugins": [
+          "redirect",
+          "client_ip",
+          "ip_restriction",
+          "ua_restriction",
+          "uri_blocker",
+          "request_blocker",
+          {
+            "name": "passwd_capture",
+            "conf": {
+              "get": true,
+              "reject_uncaptured": true,
+              "rejected_conf": {
+                "response_code": 403,
+                "response_body": "非法登录方式"
+              }
+            }
+          },
+          {
+            "name": "passwd_restriction",
+            "conf": {
+              "enable_weakpass_dict": true,
+              "min_passwd_length": 8,
+              "allow_name_in_passwd": false,
+              "blacklist": [
+                "^[0-9]+$",
+                "^[a-zA-Z]+$"
+              ],
+              "fetch_vars": {
+                "user": {
+                  "source": "request_body",
+                  "field": "user",
+                  "parser": "json"
+                },
+                "passwd": {
+                  "source": "request_body",
+                  "field": "password",
+                  "parser": "json"
+                }
+              },
+              "login_name_var": "${user}",
+              "login_passwd_var": "${passwd}",
+              "action": "block",
+              "rejected_conf": {
+                "response_code": 403,
+                "response_headers": {
+                  "Content-Type": "application/json; charset=utf-8"
+                },
+                "response_body": "{\"statusCode\": 401, \"message\": \"弱密码禁止登录\"}"
+              }
+            }
+          },
+          {
+            "name": "passwd_bruteforce",
+            "conf": {
+              "count": 4,
+              "time_window": 30,
+              "fetch_vars": {
+                "user": {
+                  "source": "request_body",
+                  "field": "user",
+                  "parser": "json"
+                }
+              },
+              "login_name_var": "${user}",
+              "block_ip": true,
+              "block_ip_duration": 120,
+              "block_login": true,
+              "ip_only_limit": true,
+              "ip_limit_count": 6,
+              "ip_limit_time_window": 30,
+              "rejected_conf": {
+                "response_code": 403,
+                "response_headers": {
+                  "Content-Type": "application/json; charset=utf-8"
+                },
+                "response_body": "{\"statusCode\": 401, \"message\": \"登录受限\"}"
+              }
+            }
+          },
+          {
+            "name": "exposure_login",
+            "conf": {
+              "fetch_vars": {
+                "user_id": {
+                  "source": "request_body",
+                  "field": "user",
+                  "parser": "json"
+                },
+                "user_name": {
+                  "source": "request_body",
+                  "field": "user",
+                  "parser": "json"
+                },
+                "status_code": {
+                  "source": "response_body",
+                  "field": "statusCode",
+                  "parser": "json"
+                },
+                "message": {
+                  "source": "response_body",
+                  "field": "message",
+                  "parser": "json"
+                }
+              },
+              "user_id_var": "${user_id}",
+              "user_name_var": "${user_name}",
+              "failure_msg_var": "${message}",
+              "success_expr": [
+                [
+                  "${upstream_status}",
+                  "==",
+                  200
+                ],
+                [
+                  "${message}",
+                  "==",
+                  "Logged in"
+                ]
+              ],
+              "passwd_failed_expr": [
+                [
+                  "${upstream_status}",
+                  "==",
+                  401
+                ],
+                [
+                  "${status_code}",
+                  "==",
+                  401
+                ]
+              ],
+              "log_method": "password",
+              "save_session": true,
+              "inspect_content": {
+                "enable": true,
+                "reject": true,
+                "target_vars": [
+                  "${user_name}",
+                  "${user_id}"
+                ],
+                "operator": "AND",
+                "rules": [
+                  "\\b(select|insert|update|delete|drop|union|create|alter|truncate|where)\\b\\s+",
+                  "(/bin/(sh|bash)",
+                  "(;|')"
+                ],
+                "response_code": 403,
+                "response_headers": {
+                  "Content-Type": "application/json; charset=utf-8"
+                },
+                "response_body": "{\"statusCode\": 401, \"message\": \"非法登录内容\"}"
+              }
+            }
+          },
+          "unzip",
+          "gzip"
+        ],
+        "routes": [
+          {
+            "uri": "/login",
+            "methods": [
+              "POST"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "登录页(用于注入账密JS)",
+        "plugins": [
+          "redirect",
+          "client_ip",
+          "ip_restriction",
+          "uri_blocker",
+          "request_blocker",
+          "ua_restriction",
+          {
+            "name": "passwd_capture",
+            "conf": {
+              "uri_pattern": "/login",
+              "set": true
+            }
+          },
+          "unzip",
+          "gzip"
+        ],
+        "routes": [
+          {
+            "uri": "/login",
+            "methods": [
+              "GET"
+            ]
+          }
+        ]
+      }
+    ],
+    "plugin_confs": {
+      "ip_restriction": {
+        "enable_shared_blacklist": true,
+        "message": "Your IP address is not allowed"
+      },
+      "exposure_session": {
+        "key_name": "cookie_grafana_session"
+      },
+      "uri_bypass": {
+        "filters": [
+          "^/public/.*\\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot|ico|map)$",
+          "^(/|/login|/logout)$",
+          "^/user/auth-tokens/rotate$",
+          "^/api/user/password/send-reset-email$",
+          "^/favicon\\.ico$"
+        ]
+      },
+      "exposure_user": {
+        "key_name": "cookie_grafana_session",
+        "sub_requests": [
+          {
+            "name": "get_user",
+            "desc": "获取已登录用户信息",
+            "uri": "/api/user",
+            "method": "GET",
+            "fetch_vars": {
+              "user_id": {
+                "source": "response_body",
+                "field": "login",
+                "parser": "json"
+              },
+              "user_name": {
+                "source": "response_body",
+                "field": "login",
+                "parser": "json"
+              }
+            },
+            "success_expr": [
+              [
+                "${upstream_status}",
+                "==",
+                200
+              ]
+            ]
+          }
+        ],
+        "user_id_var": "${get_user.user_id}",
+        "user_name_var": "${get_user.user_name}"
+      },
+      "ua_restriction": {
+        "allowlist": [
+          "(?i)(chrome|firefox|safari|edge|trident|msie|opera)"
+        ],
+        "bypass_missing": true,
+        "denylist": [
+          "(?i)(curl|wget|httpclient|postman|python-requests|httpie|httpx|go-http-client|sqlmap|acunetix|nikto|awvs|dirbuster|gobuster|wfuzz|\\(\\) \\{)"
+        ],
+        "message": "非法访问"
+      }
+    }
+  }
+}

@@ -1,0 +1,240 @@
+{
+  "desc": {
+    "plugin_name": "gitlab插件",
+    "plugin_for_app_name": "gitlab",
+    "plugin_for_app_version": "V1",
+    "plugin_version": "1.0.0",
+    "plugin_need_engine_version": "1.0",
+    "plugin_author": "TigerSec",
+    "plugin_description": "gitlab插件",
+    "plugin_last_updated": "2025-12-18"
+  },
+  "user_configures": [
+    {
+      "lable": "未认证时响应码",
+      "json_path": "gw_configures.plugins[6].conf.response_code",
+      "type": "int",
+      "description": "没有认证的流量处理方式 response_code"
+    },
+    {
+      "lable": "未认证时响应消息",
+      "json_path": "gw_configures.plugins[6].conf.response_msg",
+      "type": "text",
+      "description": "没有认证的流量处理方式 response_msg"
+    },
+    {
+      "lable": "未认证时响应消息",
+      "json_path": "gw_configures.plugins[6].conf.response_msg",
+      "type": "select",
+      "value_type": "text",
+      "options": [
+        {"label": "禁止访问", "value": "禁止访问"},
+        {"label": "xxx", "value": "xxx"}
+      ],
+      "description": "没有认证的流量处理方式 response_msg"
+    },
+    {
+      "lable": "LDAP登录接口请求方式",
+      "json_path": "gw_configures.sub_routes[0].routes[0].methods",
+      "type": "select",
+      "value_type": "text",
+      "options": [
+        {"label": "GET", "value": "GET"},
+        {"label": "POST", "value": "POST"}
+      ],
+      "description": "LDAP 回调登录接口请求方式"
+    },
+    {
+      "lable": "标准登录接口请求方式",
+      "json_path": "gw_configures.sub_routes[1].routes[0].methods",
+      "type": "select",
+      "value_type": "text",
+      "options": [
+        {"label": "GET", "value": "GET"},
+        {"label": "POST", "value": "POST"}
+      ],
+      "description": "标准用户名密码登录接口请求方式"
+    }
+  ],
+  "gw_configures": {
+    "plugins": [
+      "redirect",
+      "client_ip",
+      "uri_blocker",
+      "request_blocker",
+      "uri_bypass",
+      "anony_attack_blocker",
+      {
+        "name": "exposure_auth",
+        "conf": {
+          "response_code": 403,
+          "response_msg": "拒绝访问"
+        }
+      },
+      "app_logger"
+    ],
+    "sub_routes": [
+      {
+        "name": "login_ldap",
+        "desc": "LDAP 回调登录接口",
+        "plugins": [
+          "redirect",
+          "passwd_capture",
+          "passwd_bruteforce",
+          "passwd_restriction",
+          {
+            "name": "exposure_login",
+            "conf": {
+              "fetch_vars": {
+                "set_cookie": {
+                  "source": "response_header",
+                  "field": "Set-Cookie"
+                },
+                "user_name": "$arg_username"
+              },
+              "success_expr": [
+                "AND",
+                ["${upstream_status}", "==", 302],
+                ["${set_cookie}", "~", "_gitlab_session"],
+                ["${user_name}", "!=", ""]
+              ],
+              "user_name_var": "${user_name}",
+              "save_session": true,
+              "set_MFA": {
+                "enable": true,
+                "localtion": "/users/sign_in"
+              },
+              "passwd_failed_expr": [
+                ["${upstream_status}", "==", 401],
+                ["${set_cookie}", "~=", "_gitlab_session"]
+              ],
+              "failed_by_updateSW": "bypass"
+            }
+          },
+          "gzip"
+        ],
+        "routes": [
+          {
+            "uri": "/users/auth/ldapmain/callback",
+            "methods": ["POST"]
+          }
+        ]
+      },
+      {
+        "name": "login_standard",
+        "desc": "标准用户名密码登录接口",
+        "plugins": [
+          "redirect",
+          "passwd_capture",
+          "passwd_bruteforce",
+          "passwd_restriction",
+          {
+            "name": "exposure_login",
+            "conf": {
+              "fetch_vars": {
+                "set_cookie": {
+                  "source": "response_header",
+                  "field": "Set-Cookie"
+                },
+                "user_name": "$arg_username"
+              },
+              "success_expr": [
+                "AND",
+                ["${upstream_status}", "==", 302],
+                ["${set_cookie}", "~", "_gitlab_session"],
+                ["${user_name}", "!=", ""]
+              ],
+              "user_name_var": "${user_name}",
+              "save_session": true,
+              "set_MFA": {
+                "enable": true,
+                "localtion": "/users/sign_in"
+              },
+              "passwd_failed_expr": [
+                ["${upstream_status}", "==", 401],
+                ["${set_cookie}", "~=", "_gitlab_session"]
+              ],
+              "failed_by_updateSW": "bypass"
+            }
+          },
+          "gzip"
+        ],
+        "routes": [
+          {
+            "uri": "/users/sign_in",
+            "methods": ["POST"]
+          }
+        ]
+      }
+    ],
+    "plugin_confs": {
+      "anony_attack_blocker": {
+        "allow_request": false,
+        "policy": "local"
+      },
+      "passwd_bruteforce": {
+        "allow_degradation": false,
+        "rejected_msg": "{\"code\":10206,\"msg\":\"非法攻击\",\"status\":false}"
+      },
+      "passwd_restriction": {
+        "rejected_code": 200,
+        "rejected_msg": "弱密码禁止登录",
+        "block_request": false
+      },
+      "uri_bypass": {
+        "filters": [
+          "^/assets/",
+          "^/uploads/",
+          "^/static/.*\\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf)$",
+          "^/favicon\\.ico$",
+          "^/robots\\.txt$",
+          "^/health$",
+          "^/ping$"
+        ]
+      },
+      "exposure_session": {
+        "key_name": "cookie_WISID"
+      },
+      "exposure_user": {
+        "key_name": "cookie__gitlab_session",
+        "cache_key_with_ip": false,
+        "sub_requests": [
+          {
+            "name": "get_user",
+            "desc": "GitLab 官方用户信息接口 /api/v4/user，最终判定是否已登录",
+            "uri": "/api/v4/user",
+            "method": "GET",
+            "headers": {
+              "Accept": "application/json"
+            },
+            "fetch_vars": {
+              "name": {
+                "source": "response_body",
+                "parser": "json",
+                "field": "name"
+              },
+              "username": {
+                "source": "response_body",
+                "parser": "json",
+                "field": "username"
+              },
+              "id": {
+                "source": "response_body",
+                "parser": "json",
+                "field": "id"
+              }
+            },
+            "success_expr": [
+              "AND",
+              ["${upstream_status}", "==", 200],
+              ["${id}", "!=", ""]
+            ]
+          }
+        ],
+        "user_id_var": "${get_user.id}",
+        "user_name_var": "${get_user.name}",
+        "failed_by_updateSW": "bypass"
+      }
+    }
+  }
+}
