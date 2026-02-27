@@ -20,11 +20,10 @@
   ```
 
 ## 步骤 3：校验与确认
-1. 运行验证工具（严格模式可选）  
-   ```
-   python tools/config_validator.py 零改造引擎规则doc/examples/xxx_config.json
-   python tools/config_validator.py --strict 零改造引擎规则doc/examples/xxx_config.json
-   ```
+1. 运行验证工具
+   
+   使用 `plugin-validate.py` 对 插件 所有配置进行校验
+
 2. 对照 HAR 手工复核：
    - 登录成功样本：`success_expr` 是否与 HAR 中 code/success/状态码一致；Set-Cookie 是否覆盖。
    - 登录失败样本：`passwd_failed_expr` 是否命中错误返回。
@@ -85,4 +84,4 @@ https://blog.csdn.net/hrayha/article/details/106862744 绕过ssl pining使用bur
 
 ### 抓完后的整理
 - 将 HAR 放入 `hars/`，并在 README 的步骤中引用；必要时对敏感信息做脱敏副本。  
-- 按主流程验证配置（成功/失败/用户信息接口/白名单）并运行 `tools/config_validator.py`。  
+- 按主流程验证配置（成功/失败/用户信息接口/白名单）并运行  `plugin-validate.py` 进行校验。  
